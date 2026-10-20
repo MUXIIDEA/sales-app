@@ -1,0 +1,17 @@
+{
+  "name": "sales-app",
+  "version": "1.0.0",
+  "description": "内网销售记录系统（Node.js + Express + SQLite）",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "express": "^4.21.2"
+  }
+}

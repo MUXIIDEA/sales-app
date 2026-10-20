@@ -1,0 +1,29 @@
+# ============================================================
+# 销售记录系统 .gitignore
+# 注意：本项目按作者要求将 node_modules 一并提交（保留 Windows/Node22 免安装特性），
+#       因此这里【不】忽略 node_modules。
+# ============================================================
+
+# ===== 数据库文件（含真实业务数据，切勿提交到仓库） =====
+sales.db
+sales.db-shm
+sales.db-wal
+test_perm.db
+test_perm.db-shm
+test_perm.db-wal
+
+# ===== 临时 / 调试 / 测试脚本（勿提交） =====
+_perm_test.js
+_reseq_test.js
+_perm_out.txt
+_reseq_out.txt
+_s.log
+nul
+
+# ===== 操作系统 / 编辑器 / 环境 =====
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.*
+!.gitignore
