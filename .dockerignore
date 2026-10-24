@@ -1,0 +1,25 @@
+# 不进入镜像的内容（保证镜像在 Linux 上干净构建）
+node_modules
+.git
+.gitignore
+
+# 数据库（含真实业务数据，切勿打进镜像）
+sales.db
+sales.db-shm
+sales.db-wal
+test_perm.db
+test_perm.db-shm
+test_perm.db-wal
+
+# 临时 / 调试文件
+_perm_test.js
+_reseq_test.js
+_perm_out.txt
+_reseq_out.txt
+_s.log
+nul
+*.log
+
+# 部署相关
+Dockerfile
+.dockerignore
