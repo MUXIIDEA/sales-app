@@ -27,3 +27,6 @@ Thumbs.db
 .env
 .env.*
 !.gitignore
+
+# ===== 内网穿透工具（Cloudflare 官方二进制，不入库） =====
+cloudflared.exe

@@ -23,3 +23,9 @@ nul
 # 部署相关
 Dockerfile
 .dockerignore
+
+# 内网穿透工具与启动脚本（仅本机使用，勿打进镜像）
+cloudflared.exe
+start-tunnel.bat
+start-tunnel-lt.bat
+start.bat

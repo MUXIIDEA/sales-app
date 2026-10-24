@@ -46,6 +46,8 @@ async function api(path, opts = {}) {
 function logout() {
   localStorage.removeItem('sales_token'); TOKEN = ''; USER = null;
   $('#loginMask').classList.add('show');
+  // 会话过期（如服务重启）时也要重新拉取账号列表，否则登录下拉会是空的
+  loadLoginList();
 }
 
 async function initLogin() {
@@ -266,7 +268,7 @@ async function renderNew() {
           </div>
           <div class="form-item">
             <label><span class="req">*</span>销售时间</label>
-            <input id="f_time" type="datetime-local" required value="${record ? record.sold_at.slice(0, 16) : nowLocal()}">
+            <input id="f_time" type="datetime-local" required value="${record ? record.sold_at.slice(0, 16).replace(' ', 'T') : nowLocal()}">
           </div>
           <div class="form-item">
             <label>客户</label>
@@ -342,14 +344,14 @@ async function renderRecords() {
     <div class="page-desc">按条件筛选历史记录，可编辑、导出</div>
     <div class="card">
       <div class="filter-bar">
-        <div class="form-item"><label>开始日期</label><input type="date" id="q_from"></div>
-        <div class="form-item"><label>结束日期</label><input type="date" id="q_to"></div>
+        <div class="form-item"><label>开始日期</label><input type="date" id="q_from" value="${listState.from}"></div>
+        <div class="form-item"><label>结束日期</label><input type="date" id="q_to" value="${listState.to}"></div>
         ${USER.role === 'admin' ? `<div class="form-item"><label>销售员</label><select id="q_seller">
           <option value="">全部销售员</option>
           ${persons.map((p) => `<option value="${escapeHtml(p.name)}" ${listState.salesperson === p.name ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}
         </select></div>` : ''}
-        <div class="form-item"><label>客户</label><input id="q_customer" placeholder="全部"></div>
-        <div class="form-item"><label>商品关键字</label><input id="q_keyword" placeholder="如：耳机"></div>
+        <div class="form-item"><label>客户</label><input id="q_customer" placeholder="全部" value="${escapeHtml(listState.customer)}"></div>
+        <div class="form-item"><label>商品关键字</label><input id="q_keyword" placeholder="如：耳机" value="${escapeHtml(listState.keyword)}"></div>
         <button class="btn btn-primary" onclick="doSearch()">查询</button>
         <button class="btn" onclick="resetSearch()">重置</button>
         <button class="btn" onclick="exportCsv()">导出 CSV</button>

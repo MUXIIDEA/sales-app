@@ -488,22 +488,27 @@ for (const [table, meta] of Object.entries(archiveTables)) {
     if (!name) return fail(res, `请填写${meta.name}名称`);
     const old = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(req.params.id);
     if (!old) return fail(res, '记录不存在', 40400);
+    const nextIsAdmin = table === 'salespersons' ? (b.is_admin ? 1 : 0) : null;
+    // 不能把最后一名启用中的管理员降级为销售员，否则将无人可管理
+    if (table === 'salespersons' && old.is_admin && old.is_active && !nextIsAdmin && activeAdminCount() <= 1) {
+      return fail(res, '至少需保留一名启用中的管理员，无法降级为销售员');
+    }
     try {
       const extra = table === 'products'
         ? [b.default_price === '' || b.default_price == null ? null : Number(b.default_price),
            b.default_cost === '' || b.default_cost == null ? null : Number(b.default_cost)]
         : table === 'customers' ? [String(b.phone || '').trim()]
-        : [b.is_admin ? 1 : 0];
+        : [nextIsAdmin];
       const info = db.prepare(`UPDATE ${table} SET name = ?, ${meta.cols.map(c => c + ' = ?').join(', ')} WHERE id = ?`).run(name, ...extra, req.params.id);
       if (info.changes === 0) return fail(res, '记录不存在', 40400);
       // 销售记录按「名称」关联档案，改名后同步更新历史记录里的名称，否则旧记录会与档案失去关联
       if (old.name !== name) {
         const col = table === 'products' ? 'product_name' : table === 'customers' ? 'customer' : 'salesperson';
         db.prepare(`UPDATE sales_records SET ${col} = ? WHERE ${col} = ?`).run(name, old.name);
-        // 若被改名的正是已登录账号，其 token 里的姓名已失效，强制重新登录（否则会看到空数据）
-        if (table === 'salespersons') {
-          for (const [tk, v] of tokens) if (v.name === old.name) tokens.delete(tk);
-        }
+      }
+      // 若被改名或角色变更的正是已登录账号，token 里的姓名/权限已失效，强制重新登录
+      if (table === 'salespersons' && (old.name !== name || old.is_admin !== nextIsAdmin)) {
+        for (const [tk, v] of tokens) if (v.name === old.name) tokens.delete(tk);
       }
       ok(res, { updated: true });
     } catch (e) {
@@ -520,13 +525,19 @@ for (const [table, meta] of Object.entries(archiveTables)) {
     if (table === 'salespersons' && row.is_admin && row.is_active && activeAdminCount() <= 1) {
       return fail(res, '至少需保留一名启用中的管理员，无法停用');
     }
-    db.prepare(`UPDATE ${table} SET is_active = ? WHERE id = ?`).run(row.is_active ? 0 : 1, row.id);
-    ok(res, { is_active: row.is_active ? 0 : 1 });
+    const nextActive = row.is_active ? 0 : 1;
+    db.prepare(`UPDATE ${table} SET is_active = ? WHERE id = ?`).run(nextActive, row.id);
+    // 销售员被停用后，其已登录的 token 立即失效，避免停用后仍可继续操作
+    if (table === 'salespersons' && !nextActive) {
+      for (const [tk, v] of tokens) if (v.name === row.name) tokens.delete(tk);
+    }
+    ok(res, { is_active: nextActive });
   });
   app.delete(`/api/${table}/:id`, (req, res) => {
     const user = requireAdmin(req, res); if (!user) return;
+    let sp = null;
     if (table === 'salespersons') {
-      const sp = db.prepare('SELECT * FROM salespersons WHERE id = ?').get(req.params.id);
+      sp = db.prepare('SELECT * FROM salespersons WHERE id = ?').get(req.params.id);
       if (sp && sp.is_admin && sp.is_active && activeAdminCount() <= 1) {
         return fail(res, '至少需保留一名启用中的管理员，无法删除');
       }
@@ -535,6 +546,10 @@ for (const [table, meta] of Object.entries(archiveTables)) {
     }
     const info = db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(req.params.id);
     if (info.changes === 0) return fail(res, '记录不存在', 40400);
+    // 账户被删除后，其已登录的 token 立即失效（否则仍可凭旧 token 继续操作）
+    if (table === 'salespersons' && sp) {
+      for (const [tk, v] of tokens) if (v.name === sp.name) tokens.delete(tk);
+    }
     resequenceArchive(table);
     ok(res, { deleted: true });
   });
