@@ -7,6 +7,8 @@
 - 数据文件：`sales.db`（一个文件就是整个数据库，**备份 = 复制它**）
 - 无需公网、无需域名、无需购买任何云服务
 - **本压缩包已内置 `node_modules`，免安装、免 `npm`：双击 `start.bat` 即可运行**
+- 开源仓库：<https://github.com/MUXIIDEA/sales-app>（含 Docker 部署与内网穿透说明）
+- 需要外网访问？见「十、外网访问（可选）」
 
 ---
 
@@ -147,13 +149,53 @@ set PORT=3001 && node server.js
 sales-app/
 ├── server.js            # 后端服务（API + SQLite + 登录态）
 ├── package.json         # 项目与依赖清单
+├── package-lock.json    # 依赖锁文件
 ├── start.bat            # Windows 一键启动（双击即用）
+├── start-tunnel.bat     # Cloudflare 内网穿透一键启动（外网访问用）
+├── start-tunnel-lt.bat  # localtunnel 内网穿透一键启动（备选，免下载但可能不稳）
+├── Dockerfile           # 容器化部署（适配 Render / Railway / Fly.io 等）
+├── .dockerignore        # 镜像构建忽略项
+├── .gitignore           # Git 忽略项（数据库 / 临时文件 / 穿透二进制）
 ├── README.md            # 本说明
 ├── 开发文档.md           # 架构 / API / 数据库表结构
+├── DEPLOY.md            # 部署到免费云平台（外网访问）详细说明
 ├── node_modules/        # 依赖（已内置，免 npm install）
 ├── public/              # 前端页面（改完刷新即生效，无需构建）
 │   ├── index.html
 │   ├── style.css
-│   └── app.js
+│   ├── app.js
+│   └── login-art.png
 └── sales.db             # SQLite 数据库（首次启动自动生成；本包未预置，启动后新建）
+```
+
+> 注意：`cloudflared.exe` 不会被提交到仓库（已在 `.gitignore` 忽略），需自行从
+> <https://github.com/cloudflare/cloudflared/releases> 下载后放入本目录（或用 `choco install cloudflared -y`）。
+
+---
+
+## 十、外网访问（可选）
+
+默认是**内网**使用。如果需要让外部网络（非同一 WiFi）也能访问，有以下方式：
+
+### 方式 A：Cloudflare 内网穿透（推荐，免账号、免注册、数据留本地）
+
+不换服务器，用 `cloudflared` 把你那台常开电脑的 `localhost:3000` 暴露成一个公网地址，
+数据库仍在你本地（安全、持久）。
+
+1. 下载 `cloudflared-windows-amd64.exe`，重命名为 `cloudflared.exe` 放进本目录
+   （或用 Chocolatey：`choco install cloudflared -y`）；
+2. 双击 **`start-tunnel.bat`**；
+3. 等几秒，窗口里会出现 `https://xxxx.trycloudflare.com` 公网地址，分享即可。
+
+> 该地址每次重开都会变；关闭窗口即断开。想常开就让那台电脑一直运行（或加入开机自启）。
+> 若连不上，确认 `start-tunnel.bat` 里的目标地址是 `http://127.0.0.1:3000`（IPv4），
+> 不要用 `localhost`（会被解析成 IPv6 的 `::1` 导致连接被拒）。
+
+### 方式 B：部署到免费云平台（Docker）
+
+把整个仓库部署到 Render / Railway / Fly.io 等支持 Docker 的免费平台，获得一个固定公网域名。
+详见 **`DEPLOY.md`**。要点：用仓库里的 `Dockerfile` 构建，挂载持久卷到 `/data` 并设置
+`DB_PATH=/data/sales.db`（否则重启丢数据），并设置 `ADMIN_PASSWORD` 环境变量。
+
+> 提示：GitHub Pages **不能**运行本项目（它只能托管静态页面，而本项目有后端 + SQLite 数据库）。
 ```
