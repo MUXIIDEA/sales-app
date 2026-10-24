@@ -194,8 +194,10 @@ async function renderHome() {
     api('/api/records?page=1&page_size=5'),
   ]);
   $('#homeDate').textContent = `${daily.date}（今天）`;
+  const netProfit = daily.net_profit;
   $('#statGrid').innerHTML = `
     <div class="stat-card"><div class="label">今日销售额</div><div class="value red">¥ ${fmtMoney(daily.total_amount)}</div><div class="sub">实时累计</div></div>
+    <div class="stat-card"><div class="label">今日净利润</div><div class="value" style="color:${netProfit >= 0 ? 'var(--red)' : 'var(--green)'}">¥ ${fmtMoney(netProfit)}</div><div class="sub">销售额 ¥${fmtMoney(daily.total_amount)} − 成本 ¥${fmtMoney(daily.total_cost)}</div></div>
     <div class="stat-card"><div class="label">今日单数</div><div class="value">${daily.order_count} 笔</div><div class="sub">成功录入的记录数</div></div>
     <div class="stat-card"><div class="label">今日销量最高商品</div><div class="value" style="font-size:20px">${daily.top_product ? escapeHtml(daily.top_product) : '—'}</div><div class="sub">按销售数量</div></div>
     <div class="stat-card"><div class="label">快捷操作</div><div style="margin-top:8px"><button class="btn btn-primary" onclick="location.hash='#/new'">+ 记一笔</button></div><div class="sub">30 秒完成记账</div></div>`;
@@ -205,6 +207,7 @@ async function renderHome() {
       <div class="chart-amt">${t.amount ? fmtMoney(t.amount) : ''}</div>
       <div class="chart-bar ${t.amount ? '' : 'zero'}" style="height:${Math.max(t.amount / max * 100, t.amount ? 3 : 2)}%"></div>
       <div class="chart-day">${t.date.slice(5).replace('-', '/')}</div>
+      <div class="chart-profit">${t.profit ? '利' + fmtMoney(t.profit) : ''}</div>
     </div>`).join('');
   renderRecentTable(recent);
 }
@@ -253,8 +256,13 @@ async function renderNew() {
             <input id="f_qty" type="number" min="1" step="1" required placeholder="1" value="${record ? record.quantity : 1}" oninput="calcTotal()">
           </div>
           <div class="form-item">
-            <label>总价（元，自动计算）</label>
+            <label>成本价（元/件，选填，可为 0）</label>
+            <input id="f_cost" type="number" step="0.01" min="0" placeholder="0.00" value="${record ? record.cost_price : ''}" oninput="calcTotal()">
+          </div>
+          <div class="form-item">
+            <label>总价 / 预计利润（自动计算）</label>
             <div class="total-preview" id="totalPreview">¥ 0.00</div>
+            <div class="profit-preview" id="profitPreview">利润 ¥ 0.00</div>
           </div>
           <div class="form-item">
             <label><span class="req">*</span>销售时间</label>
@@ -287,12 +295,21 @@ async function renderNew() {
   $('#f_product').addEventListener('change', function () {
     const p = products.find((x) => x.name === this.value);
     if (p && p.default_price) { $('#f_price').value = p.default_price; calcTotal(); }
+    if (p && p.default_cost != null) { $('#f_cost').value = p.default_cost; calcTotal(); }
   });
 }
 function calcTotal() {
   const p = parseFloat($('#f_price').value) || 0;
   const q = parseInt($('#f_qty').value) || 0;
-  $('#totalPreview').textContent = '¥ ' + fmtMoney(Math.round(p * q * 100) / 100);
+  const c = parseFloat($('#f_cost').value) || 0;
+  const total = Math.round(p * q * 100) / 100;
+  const profit = Math.round((p - c) * q * 100) / 100;
+  $('#totalPreview').textContent = '¥ ' + fmtMoney(total);
+  const pp = $('#profitPreview');
+  if (pp) {
+    pp.textContent = '利润 ¥ ' + fmtMoney(profit);
+    pp.style.color = profit >= 0 ? 'var(--red)' : 'var(--green)';
+  }
 }
 async function submitRecord(e, id) {
   e.preventDefault();
@@ -300,6 +317,7 @@ async function submitRecord(e, id) {
     product_name: $('#f_product').value.trim(),
     unit_price: parseFloat($('#f_price').value),
     quantity: parseInt($('#f_qty').value),
+    cost_price: parseFloat($('#f_cost').value) || 0,
     sold_at: toApiTime($('#f_time').value),
     customer: $('#f_customer').value.trim(),
     // 销售员界面不显示销售员下拉，此时归属固定为本人
@@ -365,11 +383,14 @@ async function loadRecords() {
   const canDel = USER.role === 'admin';
   $('#listTable').innerHTML = data.list.length ? `
     <table class="data"><thead><tr>
-      <th>ID</th><th>销售时间</th><th>商品</th><th>单价</th><th>数量</th><th>总价</th><th>客户</th><th>销售员</th><th>备注</th><th>操作</th>
+      <th>ID</th><th>销售时间</th><th>商品</th><th>单价</th><th>数量</th><th>总价</th><th>成本</th><th>净利润</th><th>客户</th><th>销售员</th><th>备注</th><th>操作</th>
     </tr></thead><tbody>${data.list.map((r) => `<tr>
       <td>${r.id}</td><td>${escapeHtml(r.sold_at)}</td><td>${escapeHtml(r.product_name)}</td>
       <td class="num">${fmtMoney(r.unit_price)}</td><td class="num">${r.quantity}</td>
-      <td class="amount">¥ ${fmtMoney(r.total_price)}</td><td>${escapeHtml(r.customer) || '—'}</td>
+      <td class="amount">¥ ${fmtMoney(r.total_price)}</td>
+      <td class="num">¥ ${fmtMoney(r.total_cost)}</td>
+      <td class="amount" style="color:${r.total_price - r.total_cost >= 0 ? 'var(--red)' : 'var(--green)'}">¥ ${fmtMoney(Math.round((r.total_price - r.total_cost) * 100) / 100)}</td>
+      <td>${escapeHtml(r.customer) || '—'}</td>
       <td>${escapeHtml(r.salesperson)}</td><td>${escapeHtml(r.remark) || '—'}</td>
       <td><div class="ops">
         <button class="btn btn-sm" onclick="editRecord(${r.id})">编辑</button>
@@ -459,12 +480,16 @@ async function loadStats() {
   $('#statsResult').innerHTML = data.list.length ? `
     <div class="stat-grid" style="margin-bottom:14px">
       <div class="stat-card"><div class="label">区间总销售额</div><div class="value red">¥ ${fmtMoney(data.total_amount)}</div></div>
+      <div class="stat-card"><div class="label">区间总成本</div><div class="value">¥ ${fmtMoney(data.total_cost)}</div></div>
+      <div class="stat-card"><div class="label">区间净利润</div><div class="value" style="color:${data.total_profit >= 0 ? 'var(--red)' : 'var(--green)'}">¥ ${fmtMoney(data.total_profit)}</div></div>
       <div class="stat-card"><div class="label">区间总单数</div><div class="value">${data.total_count} 笔</div></div>
     </div>
-    <div class="table-wrap"><table class="data"><thead><tr><th>${unit}</th><th>单数</th><th>销售额（元）</th><th>占比</th></tr></thead>
+    <div class="table-wrap"><table class="data"><thead><tr><th>${unit}</th><th>单数</th><th>销售额（元）</th><th>成本（元）</th><th>净利润（元）</th><th>占比</th></tr></thead>
     <tbody>${data.list.map((r) => `<tr>
       <td>${escapeHtml(r.name)}</td><td class="num">${r.order_count}</td>
       <td class="amount">¥ ${fmtMoney(r.amount)}</td>
+      <td class="num">¥ ${fmtMoney(r.cost)}</td>
+      <td class="amount" style="color:${r.profit >= 0 ? 'var(--red)' : 'var(--green)'}">¥ ${fmtMoney(r.profit)}</td>
       <td class="num">${data.total_amount ? (r.amount / data.total_amount * 100).toFixed(1) : 0}%</td>
     </tr>`).join('')}</tbody></table></div>` : '<div class="empty">该区间内没有记录</div>';
 }
@@ -503,11 +528,11 @@ async function loadAdminTab() {
       <button class="btn btn-primary" onclick="showArchiveModal()">+ 新增</button>
     </div>
     <div class="table-wrap"><table class="data"><thead><tr>
-      <th>ID</th><th>名称</th>${isProduct ? '<th>默认单价</th>' : ''}${isCustomer ? '<th>电话</th>' : ''}${isPerson ? '<th>角色</th>' : ''}
+      <th>ID</th><th>名称</th>${isProduct ? '<th>默认单价</th><th>默认成本</th>' : ''}${isCustomer ? '<th>电话</th>' : ''}${isPerson ? '<th>角色</th>' : ''}
       <th>状态</th><th>操作</th>
     </tr></thead><tbody>${list.map((r) => `<tr>
       <td>${r.id}</td><td>${escapeHtml(r.name)}</td>
-      ${isProduct ? `<td class="num">${r.default_price == null ? '—' : fmtMoney(r.default_price)}</td>` : ''}
+      ${isProduct ? `<td class="num">${r.default_price == null ? '—' : fmtMoney(r.default_price)}</td><td class="num">${r.default_cost == null ? '—' : fmtMoney(r.default_cost)}</td>` : ''}
       ${isCustomer ? `<td>${escapeHtml(r.phone) || '—'}</td>` : ''}
       ${isPerson ? `<td>${r.is_admin ? '管理员' : '销售员'}</td>` : ''}
       <td>${r.is_active ? '在用' : '已停用'}</td>
@@ -526,6 +551,7 @@ function showArchiveModal(id) {
     <div class="form-grid">
       <div class="form-item full"><label>名称</label><input id="a_name"></div>
       ${isProduct ? '<div class="form-item full"><label>默认单价（元）</label><input id="a_price" type="number" step="0.01" min="0" placeholder="选填"></div>' : ''}
+      ${isProduct ? '<div class="form-item full"><label>默认成本价（元/件，选填）</label><input id="a_cost" type="number" step="0.01" min="0" placeholder="选填，可不填"></div>' : ''}
       ${isCustomer ? '<div class="form-item full"><label>电话</label><input id="a_phone" placeholder="选填"></div>' : ''}
       ${isPerson ? `<div class="form-item full"><label>角色</label><select id="a_admin"><option value="0">销售员</option><option value="1">管理员</option></select></div>` : ''}
       ${isPerson && !id ? '<div class="form-item full"><div class="page-desc">新增后默认口令为 admin+序号（如 admin4），对方登录后可在右上角自行修改。</div></div>' : ''}
@@ -539,7 +565,7 @@ function showArchiveModal(id) {
     api('/api/' + adminTab).then((list) => {
       const r = list.find((x) => x.id === id); if (!r) return;
       $('#a_name').value = r.name;
-      if (isProduct) $('#a_price').value = r.default_price ?? '';
+      if (isProduct) { $('#a_price').value = r.default_price ?? ''; $('#a_cost').value = r.default_cost ?? ''; }
       if (isCustomer) $('#a_phone').value = r.phone ?? '';
       if (isPerson) $('#a_admin').value = r.is_admin ? '1' : '0';
     }).catch(() => {});
@@ -547,7 +573,7 @@ function showArchiveModal(id) {
 }
 async function saveArchive(id) {
   const body = { name: $('#a_name').value.trim() };
-  if (adminTab === 'products') body.default_price = $('#a_price').value;
+  if (adminTab === 'products') { body.default_price = $('#a_price').value; body.default_cost = $('#a_cost').value; }
   if (adminTab === 'customers') body.phone = $('#a_phone').value.trim();
   if (adminTab === 'salespersons') body.is_admin = $('#a_admin').value === '1';
   try {
